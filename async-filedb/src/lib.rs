@@ -142,3 +142,31 @@ impl FileDb {
         let _ = self.write_ch.send(DBOp::DeletePrefix { prefix }).await;
     }
 }
+
+#[async_trait]
+impl Kvdb for FileDb {
+    async fn get(&self, key: Key) -> Option<Value> {
+        self.get(key).await
+    }
+    async fn get_all(&self) -> HashMap<Key, Value> {
+        self.get_all().await
+    }
+    async fn get_with_prefix(&self, prefix: Key) -> HashMap<Key, Value> {
+        self.get_with_prefix(prefix).await
+    }
+    async fn set(&self, key: Key, value: Value) {
+        self.set(key, value).await
+    }
+    async fn set_many(&self, data: HashMap<Key, Value>) {
+        self.set_many(data).await
+    }
+    async fn delete(&self, key: Key) {
+        self.delete(key).await
+    }
+    async fn delete_all(&self) {
+        self.delete_all().await
+    }
+    async fn delete_with_prefix(&self, prefix: Key) {
+        self.delete_with_prefix(prefix).await
+    }
+}
