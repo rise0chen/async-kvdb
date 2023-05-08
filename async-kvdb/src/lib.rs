@@ -31,6 +31,8 @@ pub trait Kvdb {
     async fn get(&self, key: Key) -> Option<Value> {
         self.get_with_prefix(key.clone()).await.remove(&key)
     }
+    async fn get_keys(&self) -> Vec<Key>;
+    async fn get_values(&self) -> Vec<Value>;
     async fn get_all(&self) -> HashMap<Key, Value>;
     async fn get_with_prefix(&self, prefix: Key) -> HashMap<Key, Value> {
         let mut data = self.get_all().await;

@@ -1,5 +1,5 @@
 use async_channel as mpsc;
-use async_kvdb::*;
+pub use async_kvdb::*;
 use async_memorydb::MenoryDb;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -115,6 +115,12 @@ impl FileDb {
     pub async fn get(&self, key: Key) -> Option<Value> {
         self.mem.get(key).await
     }
+    pub async fn get_keys(&self) -> Vec<Key> {
+        self.mem.get_keys().await
+    }
+    pub async fn get_values(&self) -> Vec<Value> {
+        self.mem.get_values().await
+    }
     pub async fn get_all(&self) -> HashMap<Key, Value> {
         self.mem.get_all().await
     }
@@ -147,6 +153,12 @@ impl FileDb {
 impl Kvdb for FileDb {
     async fn get(&self, key: Key) -> Option<Value> {
         self.get(key).await
+    }
+    async fn get_keys(&self) -> Vec<Key> {
+        self.get_keys().await
+    }
+    async fn get_values(&self) -> Vec<Value> {
+        self.get_values().await
     }
     async fn get_all(&self) -> HashMap<Key, Value> {
         self.get_all().await

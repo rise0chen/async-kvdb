@@ -1,4 +1,4 @@
-use async_kvdb::*;
+pub use async_kvdb::*;
 use async_lock::RwLock;
 use std::collections::HashMap;
 
@@ -16,6 +16,12 @@ impl MenoryDb {
 impl MenoryDb {
     pub async fn get(&self, key: Key) -> Option<Value> {
         self.mem.read().await.get(&key).cloned()
+    }
+    pub async fn get_keys(&self) -> Vec<Key> {
+        self.mem.read().await.keys().map(Clone::clone).collect()
+    }
+    pub async fn get_values(&self) -> Vec<Value> {
+        self.mem.read().await.values().map(Clone::clone).collect()
     }
     pub async fn get_all(&self) -> HashMap<Key, Value> {
         self.mem.read().await.clone()
@@ -57,6 +63,12 @@ impl MenoryDb {
 impl Kvdb for MenoryDb {
     async fn get(&self, key: Key) -> Option<Value> {
         self.get(key).await
+    }
+    async fn get_keys(&self) -> Vec<Key> {
+        self.get_keys().await
+    }
+    async fn get_values(&self) -> Vec<Value> {
+        self.get_values().await
     }
     async fn get_all(&self) -> HashMap<Key, Value> {
         self.get_all().await
