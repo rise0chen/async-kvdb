@@ -31,11 +31,11 @@ pub trait KvdbJsonExt: Kvdb {
             .filter_map(|(k, v)| decode_json(&v).map(|v| (k, v)))
             .collect()
     }
-    async fn set_json<T: Serialize + Send>(&self, key: Key, value: T) {
-        let val = encode_json(&value);
+    async fn set_json<T: Serialize + Send + Sync>(&self, key: Key, value: &T) {
+        let val = encode_json(value);
         self.set(key, val).await;
     }
-    async fn set_json_many<T: Serialize + Send>(&self, data: HashMap<Key, T>) {
+    async fn set_json_many<T: Serialize + Send + Sync>(&self, data: HashMap<Key, T>) {
         let data = data
             .into_iter()
             .map(|(k, v)| (k, encode_json(&v)))

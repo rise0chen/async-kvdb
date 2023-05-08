@@ -28,8 +28,8 @@ pub trait KvdbProtoExt: Kvdb {
             .filter_map(|(k, v)| decode_proto(&v).map(|v| (k, v)))
             .collect()
     }
-    async fn set_proto<T: Message>(&self, key: Key, value: T) {
-        let val = encode_proto(&value);
+    async fn set_proto<T: Message>(&self, key: Key, value: &T) {
+        let val = encode_proto(value);
         self.set(key, val).await;
     }
     async fn set_proto_many<T: Message>(&self, data: HashMap<Key, T>) {
