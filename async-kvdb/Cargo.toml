@@ -9,8 +9,16 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[features]
+default = []
+json = ["serde", "serde_json"]
+proto = ["prost"]
+
 [dependencies]
 async-trait = "0.1"
 bytes = "1"
 futures-util = "0.3"
+prost = {version = "0.11", optional = true}
+serde = {version = "1", features = ["derive"], optional = true}
+serde_json = {version = "1", optional = true}
 smol_str = "0.2"

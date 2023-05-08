@@ -1,8 +1,18 @@
+#[cfg(feature = "json")]
+mod json;
+#[cfg(feature = "proto")]
+mod proto;
+
 pub use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::future::join_all;
 use smol_str::SmolStr;
 use std::collections::HashMap;
+
+#[cfg(feature = "json")]
+pub use json::KvdbJsonExt;
+#[cfg(feature = "proto")]
+pub use proto::KvdbProtoExt;
 
 pub type Key = SmolStr;
 pub type Value = Bytes;
