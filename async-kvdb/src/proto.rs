@@ -16,14 +16,8 @@ pub trait KvdbProtoExt: Kvdb {
         let val = self.get(key).await;
         val.and_then(|v| decode_proto(&v))
     }
-    async fn get_proto_all<T: Message + Default>(&self) -> HashMap<Key, T> {
-        let data = self.get_all().await;
-        data.into_iter()
-            .filter_map(|(k, v)| decode_proto(&v).map(|v| (k, v)))
-            .collect()
-    }
-    async fn get_proto_with_prefix<T: Message + Default>(&self, prefix: Key) -> HashMap<Key, T> {
-        let data = self.get_with_prefix(prefix).await;
+    async fn get_many_proto<T: Message + Default>(&self, keys: Vec<Key>) -> HashMap<Key, T> {
+        let data = self.get_many(keys).await;
         data.into_iter()
             .filter_map(|(k, v)| decode_proto(&v).map(|v| (k, v)))
             .collect()
@@ -32,7 +26,7 @@ pub trait KvdbProtoExt: Kvdb {
         let val = encode_proto(value);
         self.set(key, val).await;
     }
-    async fn set_proto_many<T: Message>(&self, data: HashMap<Key, T>) {
+    async fn set_many_proto<T: Message>(&self, data: HashMap<Key, T>) {
         let data = data
             .into_iter()
             .map(|(k, v)| (k, encode_proto(&v)))

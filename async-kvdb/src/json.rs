@@ -16,17 +16,8 @@ pub trait KvdbJsonExt: Kvdb {
         let val = self.get(key).await;
         val.and_then(|v| decode_json(&v))
     }
-    async fn get_json_all<T: for<'a> Deserialize<'a>>(&self) -> HashMap<Key, T> {
-        let data = self.get_all().await;
-        data.into_iter()
-            .filter_map(|(k, v)| decode_json(&v).map(|v| (k, v)))
-            .collect()
-    }
-    async fn get_json_with_prefix<T: for<'a> Deserialize<'a>>(
-        &self,
-        prefix: Key,
-    ) -> HashMap<Key, T> {
-        let data = self.get_with_prefix(prefix).await;
+    async fn get_many_json<T: for<'a> Deserialize<'a>>(&self, keys: Vec<Key>) -> HashMap<Key, T> {
+        let data = self.get_many(keys).await;
         data.into_iter()
             .filter_map(|(k, v)| decode_json(&v).map(|v| (k, v)))
             .collect()
@@ -35,7 +26,7 @@ pub trait KvdbJsonExt: Kvdb {
         let val = encode_json(value);
         self.set(key, val).await;
     }
-    async fn set_json_many<T: Serialize + Send + Sync>(&self, data: HashMap<Key, T>) {
+    async fn set_many_json<T: Serialize + Send + Sync>(&self, data: HashMap<Key, T>) {
         let data = data
             .into_iter()
             .map(|(k, v)| (k, encode_json(&v)))

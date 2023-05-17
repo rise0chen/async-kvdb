@@ -36,34 +36,24 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
             path.push(name);
             fs::remove_file(path)?;
         }
+        DBOp::DeleteMany { keys } => {
+            for entry in fs::read_dir(path)? {
+                let file = entry?.path();
+                if file.is_file() {
+                    if let Some(name) = file.file_name() {
+                        let name = name.to_string_lossy();
+                        if keys.contains(&name.into()) {
+                            fs::remove_file(file)?;
+                        }
+                    }
+                }
+            }
+        }
         DBOp::DeleteAll => {
             for entry in fs::read_dir(path)? {
                 let file = entry?.path();
                 if file.is_file() {
                     fs::remove_file(file)?;
-                }
-            }
-        }
-        DBOp::DeletePrefix { prefix } => {
-            let prefix = key2file(prefix);
-            if prefix.is_empty() {
-                for entry in fs::read_dir(path)? {
-                    let file = entry?.path();
-                    if file.is_file() {
-                        fs::remove_file(file)?;
-                    }
-                }
-            } else {
-                for entry in fs::read_dir(path)? {
-                    let file = entry?.path();
-                    if file.is_file() {
-                        if let Some(name) = file.file_name() {
-                            let name = name.to_string_lossy();
-                            if name.starts_with(&prefix) {
-                                fs::remove_file(file)?;
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -111,74 +101,36 @@ impl FileDb {
         })
     }
 }
-impl FileDb {
-    pub async fn get(&self, key: Key) -> Option<Value> {
-        self.mem.get(key).await
-    }
-    pub async fn get_keys(&self) -> Vec<Key> {
-        self.mem.get_keys().await
-    }
-    pub async fn get_values(&self) -> Vec<Value> {
-        self.mem.get_values().await
-    }
-    pub async fn get_all(&self) -> HashMap<Key, Value> {
-        self.mem.get_all().await
-    }
-    pub async fn get_with_prefix(&self, prefix: Key) -> HashMap<Key, Value> {
-        self.mem.get_with_prefix(prefix).await
-    }
-    pub async fn set(&self, key: Key, value: Value) {
-        self.mem.set(key.clone(), value.clone()).await;
-        let _ = self.write_ch.send(DBOp::Insert { key, value }).await;
-    }
-    pub async fn set_many(&self, data: HashMap<Key, Value>) {
-        self.mem.set_many(data.clone()).await;
-        let _ = self.write_ch.send(DBOp::InsertMany { data }).await;
-    }
-    pub async fn delete(&self, key: Key) {
-        self.mem.delete(key.clone()).await;
-        let _ = self.write_ch.send(DBOp::Delete { key }).await;
-    }
-    pub async fn delete_all(&self) {
-        self.mem.delete_all().await;
-        let _ = self.write_ch.send(DBOp::DeleteAll).await;
-    }
-    pub async fn delete_with_prefix(&self, prefix: Key) {
-        self.mem.delete_with_prefix(prefix.clone()).await;
-        let _ = self.write_ch.send(DBOp::DeletePrefix { prefix }).await;
-    }
-}
 
 #[async_trait]
 impl Kvdb for FileDb {
+    async fn scan_keys(&self, filter: &Filter) -> Vec<Key> {
+        self.mem.scan_keys(filter).await
+    }
     async fn get(&self, key: Key) -> Option<Value> {
-        self.get(key).await
+        self.mem.get(key).await
     }
-    async fn get_keys(&self) -> Vec<Key> {
-        self.get_keys().await
-    }
-    async fn get_values(&self) -> Vec<Value> {
-        self.get_values().await
-    }
-    async fn get_all(&self) -> HashMap<Key, Value> {
-        self.get_all().await
-    }
-    async fn get_with_prefix(&self, prefix: Key) -> HashMap<Key, Value> {
-        self.get_with_prefix(prefix).await
+    async fn get_many(&self, keys: Vec<Key>) -> HashMap<Key, Value> {
+        self.mem.get_many(keys).await
     }
     async fn set(&self, key: Key, value: Value) {
-        self.set(key, value).await
+        self.mem.set(key.clone(), value.clone()).await;
+        let _ = self.write_ch.send(DBOp::Insert { key, value }).await;
     }
     async fn set_many(&self, data: HashMap<Key, Value>) {
-        self.set_many(data).await
+        self.mem.set_many(data.clone()).await;
+        let _ = self.write_ch.send(DBOp::InsertMany { data }).await;
     }
     async fn delete(&self, key: Key) {
-        self.delete(key).await
+        self.mem.delete(key.clone()).await;
+        let _ = self.write_ch.send(DBOp::Delete { key }).await;
+    }
+    async fn delete_many(&self, keys: Vec<Key>) {
+        self.mem.delete_many(keys.clone()).await;
+        let _ = self.write_ch.send(DBOp::DeleteMany { keys }).await;
     }
     async fn delete_all(&self) {
-        self.delete_all().await
-    }
-    async fn delete_with_prefix(&self, prefix: Key) {
-        self.delete_with_prefix(prefix).await
+        self.mem.delete_all().await;
+        let _ = self.write_ch.send(DBOp::DeleteAll).await;
     }
 }
