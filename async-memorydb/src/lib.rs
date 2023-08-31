@@ -8,9 +8,7 @@ pub struct MenoryDb {
 }
 impl MenoryDb {
     pub fn new(mem: HashMap<Key, Value>) -> Self {
-        Self {
-            mem: RwLock::new(mem),
-        }
+        Self { mem: RwLock::new(mem) }
     }
 }
 
@@ -26,13 +24,7 @@ impl Kvdb for MenoryDb {
     async fn get_many(&self, keys: Vec<Key>) -> HashMap<Key, Value> {
         let mem = self.mem.read().await;
         mem.iter()
-            .filter_map(|(k, v)| {
-                if keys.contains(k) {
-                    Some((k.clone(), v.clone()))
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(k, v)| if keys.contains(k) { Some((k.clone(), v.clone())) } else { None })
             .collect()
     }
     async fn set(&self, key: Key, value: Value) {

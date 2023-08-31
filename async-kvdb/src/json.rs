@@ -18,19 +18,14 @@ pub trait KvdbJsonExt: Kvdb {
     }
     async fn get_many_json<T: for<'a> Deserialize<'a>>(&self, keys: Vec<Key>) -> HashMap<Key, T> {
         let data = self.get_many(keys).await;
-        data.into_iter()
-            .filter_map(|(k, v)| decode_json(&v).map(|v| (k, v)))
-            .collect()
+        data.into_iter().filter_map(|(k, v)| decode_json(&v).map(|v| (k, v))).collect()
     }
     async fn set_json<T: Serialize + Send + Sync>(&self, key: Key, value: &T) {
         let val = encode_json(value);
         self.set(key, val).await;
     }
     async fn set_many_json<T: Serialize + Send + Sync>(&self, data: HashMap<Key, T>) {
-        let data = data
-            .into_iter()
-            .map(|(k, v)| (k, encode_json(&v)))
-            .collect();
+        let data = data.into_iter().map(|(k, v)| (k, encode_json(&v))).collect();
         self.set_many(data).await;
     }
 }

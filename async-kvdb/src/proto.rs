@@ -18,19 +18,14 @@ pub trait KvdbProtoExt: Kvdb {
     }
     async fn get_many_proto<T: Message + Default>(&self, keys: Vec<Key>) -> HashMap<Key, T> {
         let data = self.get_many(keys).await;
-        data.into_iter()
-            .filter_map(|(k, v)| decode_proto(&v).map(|v| (k, v)))
-            .collect()
+        data.into_iter().filter_map(|(k, v)| decode_proto(&v).map(|v| (k, v))).collect()
     }
     async fn set_proto<T: Message>(&self, key: Key, value: &T) {
         let val = encode_proto(value);
         self.set(key, val).await;
     }
     async fn set_many_proto<T: Message>(&self, data: HashMap<Key, T>) {
-        let data = data
-            .into_iter()
-            .map(|(k, v)| (k, encode_proto(&v)))
-            .collect();
+        let data = data.into_iter().map(|(k, v)| (k, encode_proto(&v))).collect();
         self.set_many(data).await;
     }
 }

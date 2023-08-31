@@ -11,8 +11,5 @@ async fn main() {
     db.set_proto("proto_2".into(), &1).await;
     assert_eq!(Some(1), db.get_proto("proto_2".into()).await);
     db.set_proto("proto_3".into(), &String::from("3")).await;
-    assert_eq!(
-        Some(String::from("3")),
-        db.get_proto("proto_3".into()).await
-    );
+    assert_eq!(Some(String::from("3")), db.get_proto("proto_3".into()).await);
 }

@@ -6,9 +6,7 @@ use std::path::PathBuf;
 use std::{fs, io, thread};
 
 fn key2file(key: Key) -> String {
-    form_urlencoded::Serializer::new(String::new())
-        .append_key_only(&key)
-        .finish()
+    form_urlencoded::Serializer::new(String::new()).append_key_only(&key).finish()
 }
 fn file2key(name: &str) -> Option<Key> {
     let mut parse = form_urlencoded::parse(name.as_bytes());
@@ -66,7 +64,7 @@ pub struct FileDb {
     write_ch: mpsc::Sender<DBOp>,
 }
 impl FileDb {
-    pub fn new(path: String, auto_sync: bool) -> io::Result<Self> {
+    pub fn new(path: String) -> io::Result<Self> {
         let mut mem = HashMap::new();
         fs::create_dir_all(&path)?;
         for entry in fs::read_dir(&path)? {
@@ -85,19 +83,18 @@ impl FileDb {
             }
         }
         let (tx, receiver) = mpsc::bounded(128);
-        thread::Builder::new()
-            .name(format!("db-{}", path))
-            .spawn(move || {
-                while let Ok(op) = receiver.recv_blocking() {
-                    if let Err(err) = fsdb_exec(&path, op) {
-                        log::error!("db({}) failed exec: {:?}", path, err);
-                    }
-                    if auto_sync {
-                        let _ = std::process::Command::new("sync").spawn();
-                    }
+        thread::Builder::new().name(format!("db-{}", path)).spawn(move || {
+            while let Ok(op) = receiver.recv_blocking() {
+                if let Err(err) = fsdb_exec(&path, op) {
+                    log::error!("db({}) failed exec: {:?}", path, err);
                 }
-                log::error!("fsdb exit");
-            })?;
+                #[cfg(feature = "auto_sync")]
+                {
+                    unsafe { libc::sync() };
+                }
+            }
+            log::error!("fsdb exit");
+        })?;
         Ok(Self {
             mem: MenoryDb::new(mem),
             write_ch: tx,

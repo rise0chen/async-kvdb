@@ -9,9 +9,13 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[features]
+auto_sync = ["libc"]
+
 [dependencies]
 async-channel = {version = "1.8.0"}
 async-kvdb = {workspace = true}
 async-memorydb = {workspace = true}
 form_urlencoded = "1.0"
+libc = {version = "0.2", optional = true}
 log = "0.4"
