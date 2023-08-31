@@ -66,7 +66,7 @@ pub struct FileDb {
     write_ch: mpsc::Sender<DBOp>,
 }
 impl FileDb {
-    pub fn new(path: String) -> io::Result<Self> {
+    pub fn new(path: String, auto_sync: bool) -> io::Result<Self> {
         let mut mem = HashMap::new();
         fs::create_dir_all(&path)?;
         for entry in fs::read_dir(&path)? {
@@ -91,6 +91,9 @@ impl FileDb {
                 while let Ok(op) = receiver.recv_blocking() {
                     if let Err(err) = fsdb_exec(&path, op) {
                         log::error!("db({}) failed exec: {:?}", path, err);
+                    }
+                    if auto_sync {
+                        let _ = std::process::Command::new("sync").spawn();
                     }
                 }
                 log::error!("fsdb exit");
