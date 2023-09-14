@@ -36,19 +36,18 @@ dependencies = [
 
 [[package]]
 name = "async-filedb"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-channel",
  "async-kvdb",
  "async-memorydb",
  "form_urlencoded",
- "libc",
  "log",
 ]
 
 [[package]]
 name = "async-kvdb"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "bytes",
@@ -61,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "async-kvdb-examples"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-kvdb",
  "async-memorydb",
@@ -79,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "async-memorydb"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-kvdb",
  "async-lock",

@@ -2,6 +2,7 @@ use async_channel as mpsc;
 pub use async_kvdb::*;
 use async_memorydb::MenoryDb;
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, io, thread};
 
@@ -20,13 +21,23 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
         DBOp::Insert { key, value } => {
             let name = key2file(key);
             path.push(name);
-            fs::write(path, &*value)?;
+            let mut f = fs::File::create(path)?;
+            f.write_all(&value)?;
+            #[cfg(feature = "auto_sync")]
+            {
+                f.sync_data()?;
+            }
         }
         DBOp::InsertMany { data } => {
             for (key, value) in data {
                 let name = key2file(key);
                 let path = path.join(name);
-                fs::write(path, &*value)?;
+                let mut f = fs::File::create(path)?;
+                f.write_all(&value)?;
+                #[cfg(feature = "auto_sync")]
+                {
+                    f.sync_data()?;
+                }
             }
         }
         DBOp::Delete { key } => {
@@ -87,10 +98,6 @@ impl FileDb {
             while let Ok(op) = receiver.recv_blocking() {
                 if let Err(err) = fsdb_exec(&path, op) {
                     log::error!("db({}) failed exec: {:?}", path, err);
-                }
-                #[cfg(feature = "auto_sync")]
-                {
-                    unsafe { libc::sync() };
                 }
             }
             log::error!("fsdb exit");
