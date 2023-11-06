@@ -22,10 +22,10 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
             let name = key2file(key);
             path.push(name);
             let mut f = fs::File::create(path)?;
-            f.write_all(&value)?;
+            let _ = f.write_all(&value);
             #[cfg(feature = "auto_sync")]
             {
-                f.sync_data()?;
+                let _ = f.sync_data();
             }
         }
         DBOp::InsertMany { data } => {
@@ -33,17 +33,17 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
                 let name = key2file(key);
                 let path = path.join(name);
                 let mut f = fs::File::create(path)?;
-                f.write_all(&value)?;
+                let _ = f.write_all(&value);
                 #[cfg(feature = "auto_sync")]
                 {
-                    f.sync_data()?;
+                    let _ = f.sync_data();
                 }
             }
         }
         DBOp::Delete { key } => {
             let name = key2file(key);
             path.push(name);
-            fs::remove_file(path)?;
+            let _ = fs::remove_file(path);
         }
         DBOp::DeleteMany { keys } => {
             for entry in fs::read_dir(path)? {
@@ -52,7 +52,7 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
                     if let Some(name) = file.file_name() {
                         let name = name.to_string_lossy();
                         if keys.contains(&name.into()) {
-                            fs::remove_file(file)?;
+                            let _ = fs::remove_file(file);
                         }
                     }
                 }
@@ -62,7 +62,7 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
             for entry in fs::read_dir(path)? {
                 let file = entry?.path();
                 if file.is_file() {
-                    fs::remove_file(file)?;
+                    let _ = fs::remove_file(file);
                 }
             }
         }
@@ -93,14 +93,25 @@ impl FileDb {
                 }
             }
         }
-        let (tx, receiver) = mpsc::bounded(128);
+        let (tx, receiver) = mpsc::unbounded();
         thread::Builder::new().name(format!("db-{}", path)).spawn(move || {
-            while let Ok(op) = receiver.recv_blocking() {
-                if let Err(err) = fsdb_exec(&path, op) {
-                    log::error!("db({}) failed exec: {:?}", path, err);
+            let mut op_merger = DbOpMerger::new();
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                while let Ok(op) = receiver.try_recv() {
+                    op_merger.merge(op);
                 }
+                if op_merger.is_empty(){
+                    continue;
+                }
+                let ops = op_merger.into_ops();
+                op_merger = DbOpMerger::new();
+                if ops.clear {
+                    let _ = fsdb_exec(&path, DBOp::DeleteAll);
+                }
+                let _ = fsdb_exec(&path, DBOp::InsertMany { data: ops.insert });
+                let _ = fsdb_exec(&path, DBOp::DeleteMany { keys: ops.delete });
             }
-            log::error!("fsdb exit");
         })?;
         Ok(Self {
             mem: MenoryDb::new(mem),

@@ -26,6 +26,66 @@ pub enum DBOp {
     DeleteAll,
 }
 
+#[derive(Default)]
+pub struct DbOps {
+    pub clear: bool,
+    pub insert: HashMap<Key, Value>,
+    pub delete: Vec<Key>,
+}
+
+#[derive(Default)]
+pub struct DbOpMerger {
+    need_clear: bool,
+    ops: HashMap<Key, Option<Value>>,
+}
+impl DbOpMerger {
+    pub fn new() -> Self {
+        Self {
+            need_clear: false,
+            ops: HashMap::new(),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        !self.need_clear && self.ops.is_empty()
+    }
+    pub fn merge(&mut self, op: DBOp) {
+        match op {
+            DBOp::Insert { key, value } => {
+                self.ops.insert(key, Some(value));
+            }
+            DBOp::InsertMany { data } => {
+                for (key, value) in data {
+                    self.ops.insert(key, Some(value));
+                }
+            }
+            DBOp::Delete { key } => {
+                self.ops.insert(key, None);
+            }
+            DBOp::DeleteMany { keys } => {
+                for key in keys {
+                    self.ops.insert(key, None);
+                }
+            }
+            DBOp::DeleteAll => {
+                self.need_clear = true;
+                self.ops.clear();
+            }
+        }
+    }
+    pub fn into_ops(self) -> DbOps {
+        let mut ops = DbOps::default();
+        for (k, v) in self.ops {
+            if let Some(v) = v {
+                ops.insert.insert(k, v);
+            } else {
+                ops.delete.push(k);
+            }
+        }
+        ops.clear = self.need_clear;
+        ops
+    }
+}
+
 #[async_trait]
 pub trait Kvdb {
     async fn scan_keys(&self, filter: &Filter) -> Vec<Key>;
@@ -45,4 +105,10 @@ pub trait Kvdb {
     }
     async fn delete_many(&self, keys: Vec<Key>);
     async fn delete_all(&self);
+}
+
+#[test]
+fn empty(){
+    let op_merger = DbOpMerger::default();
+    assert!(op_merger.is_empty());
 }
