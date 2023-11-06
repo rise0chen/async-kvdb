@@ -18,7 +18,7 @@ pub type Value = Bytes;
 pub type KeyValue = (Key, Value);
 pub type Filter = dyn Fn(&Key) -> bool + Send + Sync;
 
-pub enum DBOp {
+pub enum DbOp {
     Insert { key: Key, value: Value },
     InsertMany { data: HashMap<Key, Value> },
     Delete { key: Key },
@@ -48,25 +48,25 @@ impl DbOpMerger {
     pub fn is_empty(&self) -> bool {
         !self.need_clear && self.ops.is_empty()
     }
-    pub fn merge(&mut self, op: DBOp) {
+    pub fn merge(&mut self, op: DbOp) {
         match op {
-            DBOp::Insert { key, value } => {
+            DbOp::Insert { key, value } => {
                 self.ops.insert(key, Some(value));
             }
-            DBOp::InsertMany { data } => {
+            DbOp::InsertMany { data } => {
                 for (key, value) in data {
                     self.ops.insert(key, Some(value));
                 }
             }
-            DBOp::Delete { key } => {
+            DbOp::Delete { key } => {
                 self.ops.insert(key, None);
             }
-            DBOp::DeleteMany { keys } => {
+            DbOp::DeleteMany { keys } => {
                 for key in keys {
                     self.ops.insert(key, None);
                 }
             }
-            DBOp::DeleteAll => {
+            DbOp::DeleteAll => {
                 self.need_clear = true;
                 self.ops.clear();
             }

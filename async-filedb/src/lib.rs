@@ -15,10 +15,10 @@ fn file2key(name: &str) -> Option<Key> {
     Some(data.0.into())
 }
 
-fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
+fn fsdb_exec(path: &str, op: DbOp) -> io::Result<()> {
     let mut path = PathBuf::from(path);
     match op {
-        DBOp::Insert { key, value } => {
+        DbOp::Insert { key, value } => {
             let name = key2file(key);
             path.push(name);
             let mut f = fs::File::create(path)?;
@@ -28,7 +28,7 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
                 let _ = f.sync_data();
             }
         }
-        DBOp::InsertMany { data } => {
+        DbOp::InsertMany { data } => {
             for (key, value) in data {
                 let name = key2file(key);
                 let path = path.join(name);
@@ -40,12 +40,12 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
                 }
             }
         }
-        DBOp::Delete { key } => {
+        DbOp::Delete { key } => {
             let name = key2file(key);
             path.push(name);
             let _ = fs::remove_file(path);
         }
-        DBOp::DeleteMany { keys } => {
+        DbOp::DeleteMany { keys } => {
             for entry in fs::read_dir(path)? {
                 let file = entry?.path();
                 if file.is_file() {
@@ -58,7 +58,7 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
                 }
             }
         }
-        DBOp::DeleteAll => {
+        DbOp::DeleteAll => {
             for entry in fs::read_dir(path)? {
                 let file = entry?.path();
                 if file.is_file() {
@@ -72,10 +72,13 @@ fn fsdb_exec(path: &str, op: DBOp) -> io::Result<()> {
 
 pub struct FileDb {
     mem: MenoryDb,
-    write_ch: mpsc::Sender<DBOp>,
+    write_ch: mpsc::Sender<DbOp>,
 }
 impl FileDb {
-    pub fn new(path: String) -> io::Result<Self> {
+    /// 加载本地文件数据库
+    /// path: 本地文件夹
+    /// interval_ms: 周期性存到本地硬盘
+    pub fn new(path: String, interval_ms: u64) -> io::Result<Self> {
         let mut mem = HashMap::new();
         fs::create_dir_all(&path)?;
         for entry in fs::read_dir(&path)? {
@@ -97,20 +100,20 @@ impl FileDb {
         thread::Builder::new().name(format!("db-{}", path)).spawn(move || {
             let mut op_merger = DbOpMerger::new();
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(interval_ms));
                 while let Ok(op) = receiver.try_recv() {
                     op_merger.merge(op);
                 }
-                if op_merger.is_empty(){
+                if op_merger.is_empty() {
                     continue;
                 }
                 let ops = op_merger.into_ops();
                 op_merger = DbOpMerger::new();
                 if ops.clear {
-                    let _ = fsdb_exec(&path, DBOp::DeleteAll);
+                    let _ = fsdb_exec(&path, DbOp::DeleteAll);
                 }
-                let _ = fsdb_exec(&path, DBOp::InsertMany { data: ops.insert });
-                let _ = fsdb_exec(&path, DBOp::DeleteMany { keys: ops.delete });
+                let _ = fsdb_exec(&path, DbOp::InsertMany { data: ops.insert });
+                let _ = fsdb_exec(&path, DbOp::DeleteMany { keys: ops.delete });
             }
         })?;
         Ok(Self {
@@ -133,22 +136,22 @@ impl Kvdb for FileDb {
     }
     async fn set(&self, key: Key, value: Value) {
         self.mem.set(key.clone(), value.clone()).await;
-        let _ = self.write_ch.send(DBOp::Insert { key, value }).await;
+        let _ = self.write_ch.send(DbOp::Insert { key, value }).await;
     }
     async fn set_many(&self, data: HashMap<Key, Value>) {
         self.mem.set_many(data.clone()).await;
-        let _ = self.write_ch.send(DBOp::InsertMany { data }).await;
+        let _ = self.write_ch.send(DbOp::InsertMany { data }).await;
     }
     async fn delete(&self, key: Key) {
         self.mem.delete(key.clone()).await;
-        let _ = self.write_ch.send(DBOp::Delete { key }).await;
+        let _ = self.write_ch.send(DbOp::Delete { key }).await;
     }
     async fn delete_many(&self, keys: Vec<Key>) {
         self.mem.delete_many(keys.clone()).await;
-        let _ = self.write_ch.send(DBOp::DeleteMany { keys }).await;
+        let _ = self.write_ch.send(DbOp::DeleteMany { keys }).await;
     }
     async fn delete_all(&self) {
         self.mem.delete_all().await;
-        let _ = self.write_ch.send(DBOp::DeleteAll).await;
+        let _ = self.write_ch.send(DbOp::DeleteAll).await;
     }
 }
