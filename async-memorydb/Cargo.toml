@@ -11,4 +11,4 @@ version.workspace = true
 
 [dependencies]
 async-kvdb = {workspace = true}
-async-lock = {version = "2.7.0"}
+async-lock = {version = "3"}
