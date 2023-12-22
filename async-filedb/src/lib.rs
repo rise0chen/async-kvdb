@@ -3,7 +3,7 @@ pub use async_kvdb::*;
 use async_memorydb::MenoryDb;
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{fs, io, thread};
 
 fn key2file(key: Key) -> String {
@@ -15,12 +15,11 @@ fn file2key(name: &str) -> Option<Key> {
     Some(data.0.into())
 }
 
-fn fsdb_exec(path: &str, op: DbOp) -> io::Result<()> {
-    let mut path = PathBuf::from(path);
+fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
     match op {
         DbOp::Insert { key, value } => {
             let name = key2file(key);
-            path.push(name);
+            let path = path.join(name);
             let mut f = fs::File::create(path)?;
             let _ = f.write_all(&value);
             #[cfg(feature = "auto_sync")]
@@ -42,7 +41,7 @@ fn fsdb_exec(path: &str, op: DbOp) -> io::Result<()> {
         }
         DbOp::Delete { key } => {
             let name = key2file(key);
-            path.push(name);
+            let path = path.join(name);
             let _ = fs::remove_file(path);
         }
         DbOp::DeleteMany { keys } => {
@@ -78,7 +77,8 @@ impl FileDb {
     /// 加载本地文件数据库
     /// path: 本地文件夹
     /// interval_ms: 周期性存到本地硬盘
-    pub fn new(path: String, interval_ms: u64) -> io::Result<Self> {
+    pub fn new(path: &str, interval_ms: u64) -> io::Result<Self> {
+        let path = PathBuf::from(path);
         let mut mem = HashMap::new();
         fs::create_dir_all(&path)?;
         for entry in fs::read_dir(&path)? {
@@ -97,7 +97,8 @@ impl FileDb {
             }
         }
         let (tx, receiver) = mpsc::unbounded();
-        thread::Builder::new().name(format!("db-{}", path)).spawn(move || {
+        let thread_name = format!("db-{:?}", path.file_name().unwrap_or_default());
+        thread::Builder::new().name(thread_name).spawn(move || {
             let mut op_merger = DbOpMerger::new();
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(interval_ms));
