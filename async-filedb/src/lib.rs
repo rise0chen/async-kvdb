@@ -97,7 +97,7 @@ impl FileDb {
             }
         }
         let (tx, receiver) = mpsc::unbounded();
-        let thread_name = format!("db-{:?}", path.display());
+        let thread_name = format!("db-{}", path.display());
         thread::Builder::new().name(thread_name).spawn(move || {
             let mut op_merger = DbOpMerger::new();
             loop {
