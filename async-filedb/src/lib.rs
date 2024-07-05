@@ -6,8 +6,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{fs, io, thread};
 
-fn key2file(key: Key) -> String {
-    form_urlencoded::Serializer::new(String::new()).append_key_only(&key).finish()
+fn key2file(key: &Key) -> String {
+    form_urlencoded::Serializer::new(String::new()).append_key_only(key).finish()
 }
 fn file2key(name: &str) -> Option<Key> {
     let mut parse = form_urlencoded::parse(name.as_bytes());
@@ -18,7 +18,7 @@ fn file2key(name: &str) -> Option<Key> {
 fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
     match op {
         DbOp::Insert { key, value } => {
-            let name = key2file(key);
+            let name = key2file(&key);
             let path = path.join(name);
             let mut f = fs::File::create(path)?;
             let _ = f.write_all(&value);
@@ -29,7 +29,7 @@ fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
         }
         DbOp::InsertMany { data } => {
             for (key, value) in data {
-                let name = key2file(key);
+                let name = key2file(&key);
                 let path = path.join(name);
                 let mut f = fs::File::create(path)?;
                 let _ = f.write_all(&value);
@@ -40,7 +40,7 @@ fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
             }
         }
         DbOp::Delete { key } => {
-            let name = key2file(key);
+            let name = key2file(&key);
             let path = path.join(name);
             let _ = fs::remove_file(path);
         }
@@ -50,7 +50,7 @@ fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
                 if file.is_file() {
                     if let Some(name) = file.file_name() {
                         let name = name.to_string_lossy();
-                        if keys.contains(&name.into()) {
+                        if keys.iter().any(|k| key2file(k) == name) {
                             let _ = fs::remove_file(file);
                         }
                     }
@@ -113,8 +113,12 @@ impl FileDb {
                 if ops.clear {
                     let _ = fsdb_exec(&path, DbOp::DeleteAll);
                 }
-                let _ = fsdb_exec(&path, DbOp::InsertMany { data: ops.insert });
-                let _ = fsdb_exec(&path, DbOp::DeleteMany { keys: ops.delete });
+                if !ops.insert.is_empty() {
+                    let _ = fsdb_exec(&path, DbOp::InsertMany { data: ops.insert });
+                }
+                if !ops.delete.is_empty() {
+                    let _ = fsdb_exec(&path, DbOp::DeleteMany { keys: ops.delete });
+                }
             }
         })?;
         Ok(Self {
