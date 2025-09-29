@@ -2,7 +2,13 @@ use super::*;
 use serde::{Deserialize, Serialize};
 
 fn decode_json<T: for<'a> Deserialize<'a>>(data: &[u8]) -> Option<T> {
-    serde_json::from_slice(data).ok()
+    match serde_json::from_slice(data) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            log::warn!("decode_json failed: {:?}", e);
+            None
+        }
+    }
 }
 fn encode_json<T: Serialize>(data: &T) -> Bytes {
     serde_json::to_vec_pretty(data).unwrap_or_default().into()

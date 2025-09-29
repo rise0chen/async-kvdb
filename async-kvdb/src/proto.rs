@@ -2,7 +2,13 @@ use super::*;
 use prost::Message;
 
 fn decode_proto<T: Message + Default>(data: &[u8]) -> Option<T> {
-    Message::decode(data).ok()
+    match Message::decode(data) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            log::warn!("decode_proto failed: {:?}", e);
+            None
+        }
+    }
 }
 fn encode_proto<T: Message>(data: &T) -> Bytes {
     data.encode_to_vec().into()
