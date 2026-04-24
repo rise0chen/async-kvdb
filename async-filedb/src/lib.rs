@@ -78,6 +78,7 @@ impl FileDb {
     /// path: 本地文件夹
     /// interval_ms: 周期性存到本地硬盘
     pub fn new(path: String, interval_ms: u64) -> io::Result<Self> {
+        let thread_name = format!("db-{}", &path[path.len().saturating_sub(12)..]);
         let path = PathBuf::from(path);
         let mut mem = HashMap::new();
         fs::create_dir_all(&path)?;
@@ -97,7 +98,6 @@ impl FileDb {
             }
         }
         let (tx, receiver) = mpsc::unbounded();
-        let thread_name = format!("db-{}", path.display());
         thread::Builder::new().name(thread_name).spawn(move || {
             let mut op_merger = DbOpMerger::new();
             loop {
