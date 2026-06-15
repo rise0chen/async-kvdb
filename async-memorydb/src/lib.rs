@@ -10,6 +10,9 @@ impl MenoryDb {
     pub fn new(mem: HashMap<Key, Value>) -> Self {
         Self { mem: RwLock::new(mem) }
     }
+    pub async fn is_empty(&self) -> bool {
+        self.mem.read().await.is_empty()
+    }
 }
 
 #[async_trait]

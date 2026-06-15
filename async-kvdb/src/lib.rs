@@ -19,10 +19,30 @@ pub type KeyValue = (Key, Value);
 pub type Filter = dyn Fn(&Key) -> bool + Send + Sync;
 
 pub enum DbOp {
-    Insert { key: Key, value: Value },
-    InsertMany { data: HashMap<Key, Value> },
-    Delete { key: Key },
-    DeleteMany { keys: Vec<Key> },
+    Get {
+        key: Key,
+        ch: oneshot::Sender<Value>,
+    },
+    GetMany {
+        keys: Vec<Key>,
+        ch: oneshot::Sender<HashMap<Key, Value>>,
+    },
+    GetAll {
+        ch: oneshot::Sender<HashMap<Key, Value>>,
+    },
+    Insert {
+        key: Key,
+        value: Value,
+    },
+    InsertMany {
+        data: HashMap<Key, Value>,
+    },
+    Delete {
+        key: Key,
+    },
+    DeleteMany {
+        keys: Vec<Key>,
+    },
     DeleteAll,
 }
 
@@ -31,25 +51,44 @@ pub struct DbOps {
     pub clear: bool,
     pub insert: HashMap<Key, Value>,
     pub delete: Vec<Key>,
+    pub get_one: HashMap<Key, Vec<oneshot::Sender<Value>>>,
+    pub get_many: Vec<DbOp>,
+    pub get_all: Vec<oneshot::Sender<HashMap<Key, Value>>>,
 }
 
 #[derive(Default)]
 pub struct DbOpMerger {
     need_clear: bool,
     ops: HashMap<Key, Option<Value>>,
+    get_one: HashMap<Key, Vec<oneshot::Sender<Value>>>,
+    get_many: Vec<DbOp>,
+    get_all: Vec<oneshot::Sender<HashMap<Key, Value>>>,
 }
 impl DbOpMerger {
     pub fn new() -> Self {
         Self {
             need_clear: false,
             ops: HashMap::new(),
+            get_one: HashMap::new(),
+            get_many: Vec::new(),
+            get_all: Vec::new(),
         }
     }
     pub fn is_empty(&self) -> bool {
-        !self.need_clear && self.ops.is_empty()
+        self.get_one.is_empty() && self.get_many.is_empty() && self.get_all.is_empty() && !self.need_clear && self.ops.is_empty()
     }
     pub fn merge(&mut self, op: DbOp) {
         match op {
+            DbOp::Get { key, ch } => {
+                let chs = self.get_one.entry(key).or_default();
+                chs.push(ch);
+            }
+            DbOp::GetMany { .. } => {
+                self.get_many.push(op);
+            }
+            DbOp::GetAll { ch } => {
+                self.get_all.push(ch);
+            }
             DbOp::Insert { key, value } => {
                 self.ops.insert(key, Some(value));
             }
@@ -82,6 +121,9 @@ impl DbOpMerger {
             }
         }
         ops.clear = self.need_clear;
+        ops.get_one = self.get_one;
+        ops.get_many = self.get_many;
+        ops.get_all = self.get_all;
         ops
     }
 }
@@ -108,7 +150,7 @@ pub trait Kvdb {
 }
 
 #[test]
-fn empty(){
+fn empty() {
     let op_merger = DbOpMerger::default();
     assert!(op_merger.is_empty());
 }

@@ -1,6 +1,7 @@
 use async_channel as mpsc;
 pub use async_kvdb::*;
 use async_memorydb::MenoryDb;
+use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -15,8 +16,51 @@ fn file2key(name: &str) -> Option<Key> {
     Some(data.0.into())
 }
 
+fn load_item(path: &Path, key: &Key) -> Option<Value> {
+    let name = key2file(key);
+    let path = path.join(name);
+    let value: Value = fs::read(path).ok()?.into();
+    Some(value)
+}
+fn load_all(path: &Path) -> HashMap<Key, Value> {
+    let Ok(entrys) = fs::read_dir(path) else {
+        return HashMap::new();
+    };
+    entrys
+        .filter_map(|entry| {
+            let file = entry.ok()?.path();
+            if !file.is_file() {
+                return None;
+            }
+            let name = file.file_name()?;
+            let name = name.to_string_lossy().into_owned();
+            let key = file2key(&name)?;
+            let value = fs::read(file).ok()?;
+            Some((key, value.into()))
+        })
+        .collect()
+}
+
 fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
     match op {
+        DbOp::Get { key, ch } => {
+            let value = load_item(path, &key).unwrap_or_default();
+            let _ = ch.send(value);
+        }
+        DbOp::GetMany { keys, ch } => {
+            let values = keys
+                .into_iter()
+                .filter_map(|key| {
+                    let value = load_item(path, &key)?;
+                    Some((key, value))
+                })
+                .collect();
+            let _ = ch.send(values);
+        }
+        DbOp::GetAll { ch } => {
+            let value = load_all(path);
+            let _ = ch.send(value);
+        }
         DbOp::Insert { key, value } => {
             let name = key2file(&key);
             let path = path.join(name);
@@ -70,6 +114,7 @@ fn fsdb_exec(path: &Path, op: DbOp) -> io::Result<()> {
 }
 
 pub struct FileDb {
+    cached_all: AtomicBool,
     mem: MenoryDb,
     write_ch: mpsc::Sender<DbOp>,
 }
@@ -80,28 +125,16 @@ impl FileDb {
     pub fn new(path: String, interval_ms: u64) -> io::Result<Self> {
         let thread_name = format!("db-{}", &path[path.len().saturating_sub(12)..]);
         let path = PathBuf::from(path);
-        let mut mem = HashMap::new();
+        let mem = HashMap::new();
         fs::create_dir_all(&path)?;
-        for entry in fs::read_dir(&path)? {
-            let file = entry?.path();
-            if file.is_file() {
-                if let Some(name) = file.file_name() {
-                    let name = name.to_string_lossy().into_owned();
-                    let key = if let Some(key) = file2key(&name) {
-                        key
-                    } else {
-                        continue;
-                    };
-                    let value = fs::read(file)?;
-                    mem.insert(key, value.into());
-                }
-            }
-        }
         let (tx, receiver) = mpsc::unbounded();
         thread::Builder::new().name(thread_name).spawn(move || {
             let mut op_merger = DbOpMerger::new();
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+                if let Ok(op) = receiver.recv_blocking() {
+                    op_merger.merge(op);
+                }
                 while let Ok(op) = receiver.try_recv() {
                     op_merger.merge(op);
                 }
@@ -113,30 +146,71 @@ impl FileDb {
                 if ops.clear {
                     let _ = fsdb_exec(&path, DbOp::DeleteAll);
                 }
+                // 增删 全删后的数据
                 if !ops.insert.is_empty() {
                     let _ = fsdb_exec(&path, DbOp::InsertMany { data: ops.insert });
                 }
                 if !ops.delete.is_empty() {
                     let _ = fsdb_exec(&path, DbOp::DeleteMany { keys: ops.delete });
                 }
+                // 读取最新数据
+                for (key, chs) in ops.get_one {
+                    let value = load_item(&path, &key).unwrap_or_default();
+                    for ch in chs {
+                        let _ = ch.send(value.clone());
+                    }
+                }
+                for op in ops.get_many {
+                    let _ = fsdb_exec(&path, op);
+                }
+                for ch in ops.get_all {
+                    let value = load_all(&path);
+                    let _ = ch.send(value.clone());
+                }
             }
         })?;
         Ok(Self {
+            cached_all: AtomicBool::new(false),
             mem: MenoryDb::new(mem),
             write_ch: tx,
         })
+    }
+    pub async fn clear_cache(&self) {
+        self.cached_all.store(false, Relaxed);
+        self.mem.delete_all().await;
+    }
+    pub async fn load_all(&self) {
+        let (tx, rx) = oneshot::async_channel();
+        let _ = self.write_ch.send(DbOp::GetAll { ch: tx }).await;
+        let Ok(data) = rx.await else { return };
+        self.mem.set_many(data).await;
+        self.cached_all.store(true, Relaxed);
     }
 }
 
 #[async_trait]
 impl Kvdb for FileDb {
     async fn scan_keys(&self, filter: &Filter) -> Vec<Key> {
+        if !self.cached_all.load(Relaxed) {
+            self.load_all().await;
+        }
         self.mem.scan_keys(filter).await
     }
     async fn get(&self, key: Key) -> Option<Value> {
-        self.mem.get(key).await
+        let ret = self.mem.get(key.clone()).await;
+        if ret.is_some() {
+            return ret;
+        }
+        let (tx, rx) = oneshot::async_channel();
+        let _ = self.write_ch.send(DbOp::Get { key: key.clone(), ch: tx }).await;
+        let value = rx.await.ok()?;
+        self.mem.set(key, value.clone()).await;
+        Some(value)
     }
     async fn get_many(&self, keys: Vec<Key>) -> HashMap<Key, Value> {
+        if !self.cached_all.load(Relaxed) {
+            self.load_all().await;
+        }
         self.mem.get_many(keys).await
     }
     async fn set(&self, key: Key, value: Value) {

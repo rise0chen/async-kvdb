@@ -13,8 +13,9 @@ version.workspace = true
 auto_sync = []
 
 [dependencies]
-async-channel = {version = "2.3"}
+async-channel = {version = "2", default-features = false, features = ["std"]}
 async-kvdb = {workspace = true}
 async-memorydb = {workspace = true}
-form_urlencoded = "1.0"
-log = "0.4"
+form_urlencoded = {version = "1", default-features = false, features = ["alloc"]}
+log = {version = "0.4", default-features = false}
+oneshot = {version = "0.2", default-features = false, features = ["async"]}
