@@ -5,6 +5,7 @@ edition.workspace = true
 keywords.workspace = true
 license-file.workspace = true
 name = "async-kvdb-examples"
+publish = false
 readme.workspace = true
 repository.workspace = true
 version.workspace = true
